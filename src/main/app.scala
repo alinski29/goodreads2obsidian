@@ -17,7 +17,7 @@ case class Options(
     inputDateFormat: String = "yyyy/MM/dd"
 )
 
-enum ReadStatus:
+enum ReadState:
   case Read, ToRead, CurrentlyReading
 
 case class Book(
@@ -36,7 +36,7 @@ case class Book(
     YearPublished: Option[String] = None,
     DateRead: Option[LocalDate] = None,
     DateAdded: Option[LocalDate] = None,
-    ReadStatus: ReadStatus = ReadStatus.ToRead
+    ReadStatus: ReadState = ReadState.ToRead
 ) {
 
   def getContent(): String =
@@ -44,18 +44,19 @@ case class Book(
     "---\n" + meta + "\n" + "---\n" + "\n"
 
   def fileName: String =
-    s"$Title - $Author.md"
+    s"$Title - $Author.md".replaceAll("/", "%")
 
   def toYamlMetadata(): String =
     ListMap(
-      "title"            -> Title,
-      "subtitle"         -> Subtitle,
-      "author"           -> Author,
-      "authors"          -> AdditionalAuthors,
+      "title"            -> s""""${Title}"""",
+      "subtitle"         -> s""""${Subtitle}"""",
+      "author"           -> s""""${Author}"""",
+      "authors"          -> s""""${AdditionalAuthors.mkString(", ")}"""",
       "total_page"       -> Pages,
       "date_read"        -> DateRead,
       "date_added"       -> DateAdded,
       "read_status"      -> camelToUnderscore(ReadStatus.toString),
+      "read_status"      -> ReadStatus.toString,
       "rating"           -> PersonalRating,
       "isbn_10"          -> ISBN,
       "isbn_13"          -> ISBN13,
@@ -90,7 +91,7 @@ case class Book(
 }
 
 def camelToUnderscore(text: String) =
-  text.drop(1).foldLeft(text.headOption.map(_.toLower + "") getOrElse "") {
+  text.drop(1).foldLeft(text.headOption.map(_.toLower + "").getOrElse("")) {
     case (acc, c) if c.isUpper => acc + "_" + c.toLower
     case (acc, c)              => acc + c
   }
@@ -110,14 +111,14 @@ def parseInput(record: Map[String, String]): Try[Book] =
       PersonalRating = record.get("Rating").map(_.toInt),
       GoodreadsRating = record.get("Average Rating").flatMap(x => Try(x.toDouble).toOption),
       GoodreadsId = record.get("Book Id"),
-      Pages = record.get("Number of Pages").map(_.toInt),
+      Pages = record.get("Number of Pages").flatMap(x => Try(x.toInt).toOption),
       YearPublished = record.get("Year Published"),
       DateRead = record.get("Date Read").flatMap(x => tryParseDate(x)),
       DateAdded = record.get("Date Added").flatMap(x => tryParseDate(x)),
       ReadStatus = record.getOrElse("Exclusive Shelf", "to-read") match {
-        case "currenlty-reading" => ReadStatus.CurrentlyReading
-        case "read"              => ReadStatus.Read
-        case _                   => ReadStatus.ToRead
+        case "currenlty-reading" => ReadState.CurrentlyReading
+        case "read"              => ReadState.Read
+        case _                   => ReadState.ToRead
       }
     )
     book.copy(CoverLink =
