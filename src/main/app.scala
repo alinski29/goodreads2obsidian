@@ -19,6 +19,24 @@ case class Options(
     ratingAsSymbols: Boolean = true
 )
 
+@main def run(args: String*): Unit =
+  val (opts, _) = CaseApp.parse[Options](args.toList).right.get
+
+  val booksDir     = java.io.File(s"${opts.obisidianVaultPath}/${opts.booksFolder}")
+  val resourcesDir = java.io.File(s"${opts.obisidianVaultPath}/${opts.resourcesFolder}")
+  if !booksDir.exists() then booksDir.mkdirs()
+  if !resourcesDir.exists() then resourcesDir.mkdirs()
+
+  CSVReader.open(new File(opts.inputPath)).iteratorWithHeaders.foreach: row =>
+    val tryProcessBook = for
+      book <- Book.fromAttributes(row)
+      _    <- Try(book.writeMarkdownFile(booksDir.toURI, resourcesDir.toURI))
+    yield book
+
+    tryProcessBook match
+      case Success(book) => println(s"Sucesfully processed '${book.fileName}'")
+      case Failure(ex)   => throw ex
+
 enum ReadState:
   case Read, ToRead, CurrentlyReading
 
@@ -213,30 +231,3 @@ object Book:
     Try(LocalDate.parse(raw, fmt)).toOption
 
 end Book
-
-object Goodreads2Obsidian {
-
-  def main(args: Array[String]): Unit =
-    val (opts, _) = CaseApp.parse[Options](args.toList).right.get
-
-    val booksDir     = java.io.File(s"${opts.obisidianVaultPath}/${opts.booksFolder}")
-    val resourcesDir = java.io.File(s"${opts.obisidianVaultPath}/${opts.resourcesFolder}")
-    if !booksDir.exists() then booksDir.mkdirs()
-    if !resourcesDir.exists() then resourcesDir.mkdirs()
-
-    val reader = CSVReader.open(new File(opts.inputPath))
-    val res = reader.iteratorWithHeaders.foreach { row =>
-
-      val tryProcessBook = for
-        book <- Book.fromAttributes(row)
-        _    <- Try(book.writeMarkdownFile(booksDir.toURI, resourcesDir.toURI))
-      yield book
-
-      tryProcessBook match {
-        case Success(book) => println(s"Sucesfully processed '${book.fileName}'")
-        case Failure(ex)   => throw ex
-      }
-
-    }
-
-}
